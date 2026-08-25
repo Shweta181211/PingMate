@@ -124,5 +124,3 @@ Vercel Cron (in `vercel.json`) fires every 15 minutes to process pending reminde
 College students who receive important emails about internships, hackathons, scholarships, and competitions but miss deadlines due to inbox overload.
 
 ---
-
-*Made with ❤️ for the hackathon*
