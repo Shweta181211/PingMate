@@ -19,15 +19,30 @@ OAuth callback — handled automatically by NextAuth.
 ## Emails
 
 ### `POST /api/emails`
-Scan Gmail and analyze new emails with AI.
+Fetch recent Gmail messages, store new ones, and analyse pending emails with AI
+(within a time budget; the rest are analysed in the background).
 
 **Response:**
 ```json
 {
-  "processed": 12,
-  "opportunitiesFound": 3
+  "scanned": 100,
+  "newEmails": 12,
+  "processed": 8,
+  "opportunitiesFound": 3,
+  "recruitsageUpdates": 0,
+  "pendingAnalysis": 4,
+  "rateLimited": false,
+  "remindersSent": 0,
+  "remindersFailed": 0
 }
 ```
+
+**Errors:** `401` with `code` set to `GMAIL_PERMISSION_MISSING` (Gmail checkbox not
+granted) or `GMAIL_RECONNECT_REQUIRED` (token expired); `503` with
+`GMAIL_API_DISABLED` when the Gmail API is not enabled in Google Cloud.
+
+### `POST /api/gmail/reconnect`
+Removes the stored Google tokens so the next Google sign-in grants fresh access.
 
 ### `GET /api/emails`
 Get recent analyzed emails.
@@ -56,7 +71,8 @@ Update opportunity status.
 { "status": "APPLIED" }
 ```
 
-Cancels pending reminders when status is `APPLIED` or `IGNORED`.
+Valid statuses: `PENDING | APPLIED | IGNORED | MISSED`. Cancels pending reminders
+when status is `APPLIED` or `IGNORED`; restoring to `PENDING` reschedules them.
 
 ### `DELETE /api/opportunities/:id`
 Delete an opportunity and its reminders.
@@ -77,6 +93,11 @@ Delete an opportunity and its reminders.
 { "action": "verify", "otp": "123456" }
 ```
 
+**Send a test message** (verified numbers only):
+```json
+{ "action": "test" }
+```
+
 ---
 
 ## Settings
@@ -85,7 +106,7 @@ Delete an opportunity and its reminders.
 Get user settings.
 
 ### `PATCH /api/settings`
-Update settings.
+Update settings. Upcoming reminders are rescheduled with the new preferences.
 
 **Body (any combination):**
 ```json
@@ -93,9 +114,14 @@ Update settings.
   "remindersEnabled": true,
   "reminderDayBefore": true,
   "reminderSameDayMorn": false,
-  "reminderFourHours": true
+  "reminderFourHours": true,
+  "reminderTime": "09:00",
+  "reminderHoursBefore": 4
 }
 ```
+
+- `reminderTime` — `HH:mm`, India time; used for the day-before and same-day reminders
+- `reminderHoursBefore` — `1`–`48`; hours before the deadline for the last-chance reminder
 
 ---
 
@@ -115,6 +141,8 @@ Get dashboard summary.
   },
   "todayDeadlines": [...],
   "thisWeek": [...],
+  "upcomingReminders": [...],
+  "pendingAnalysis": 0,
   "settings": { ... }
 }
 ```
@@ -124,11 +152,13 @@ Get dashboard summary.
 ## Reminders (Cron)
 
 ### `GET /api/reminders/process`
-Process and send due reminders.
+Send due reminders, mark expired opportunities as missed, and analyse a batch of
+pending emails.
 
 **Auth:** `Authorization: Bearer CRON_SECRET`
 
-Called automatically by Vercel Cron every 15 minutes.
+Call it every 5–15 minutes from a cron service when hosted. Locally, the dev
+server runs the same work every minute.
 
 **Response:**
 ```json
@@ -136,6 +166,7 @@ Called automatically by Vercel Cron every 15 minutes.
   "success": true,
   "sent": 2,
   "failed": 0,
-  "total": 2
+  "total": 2,
+  "analysis": { "analyzed": 5, "opportunitiesFound": 1, "remaining": 0 }
 }
 ```

@@ -16,13 +16,13 @@
 ## Step 1 — Clone the Project
 
 ```bash
-git clone https://github.com/yourusername/pingmate
-cd pingmate
+git clone https://github.com/Shweta181211/PingMate.git
+cd PingMate
 npm install
-cp .env.example .env.local
+cp .env.example .env
 ```
 
-Open `.env.local` in VS Code. You'll fill this in as you complete the steps below.
+Open `.env` in VS Code. You'll fill this in as you complete the steps below.
 
 ---
 
@@ -32,12 +32,15 @@ Open `.env.local` in VS Code. You'll fill this in as you complete the steps belo
 2. Click "New Project"
 3. Choose a name (e.g. `pingmate-db`), strong password, and region (Mumbai for India)
 4. Wait 2 minutes for it to spin up
-5. Go to **Settings → Database**
-6. Copy the **Connection String (URI)** under "Connection pooling"
-7. Paste into `.env.local`:
+5. Open **Connect → ORM → Prisma**
+6. Copy the **Session pooler** connection string (port `5432`)
+7. Paste into `.env`:
    ```
-   DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[ref].supabase.co:5432/postgres?pgbouncer=true"
+   DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[YOUR-PASSWORD]@[YOUR-REGION].pooler.supabase.com:5432/postgres?sslmode=require"
    ```
+
+   Use the string Supabase gives you exactly. Do not use an older saved URL;
+   a reset database password invalidates all previous URLs.
 
 ---
 
@@ -55,7 +58,7 @@ Open `.env.local` in VS Code. You'll fill this in as you complete the steps belo
 4. Go to **APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID**
    - Application type: Web application
    - Authorized redirect URIs: `http://localhost:3000/api/auth/callback/google`
-5. Copy **Client ID** and **Client Secret** → paste into `.env.local`:
+5. Copy **Client ID** and **Client Secret** → paste into `.env`:
    ```
    GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
    GOOGLE_CLIENT_SECRET="your-client-secret"
@@ -82,7 +85,7 @@ Run this command in your terminal:
 openssl rand -base64 32
 ```
 
-Copy the output → paste into `.env.local`:
+Copy the output → paste into `.env`:
 ```
 NEXTAUTH_SECRET="your-generated-secret"
 NEXTAUTH_URL="http://localhost:3000"
@@ -90,15 +93,15 @@ NEXTAUTH_URL="http://localhost:3000"
 
 ---
 
-## Step 5 — Get OpenAI API Key
+## Step 5 — Get a Groq API Key
 
-1. Go to https://platform.openai.com → Sign up
-2. Go to **API Keys → Create new secret key**
-3. Copy the key → paste into `.env.local`:
+1. Go to https://console.groq.com → Sign up (free tier available)
+2. Go to **API Keys → Create API Key**
+3. Copy the key → paste into `.env`:
    ```
-   OPENAI_API_KEY="sk-proj-..."
+   GROQ_API_KEY="gsk_..."
    ```
-4. Add at least $5 of credits (GPT-4o-mini costs ~$0.001 per email analyzed)
+4. Optional: set `GROQ_MODEL` to use a different model (default `openai/gpt-oss-120b`)
 
 ---
 
@@ -127,7 +130,7 @@ Generate a random string for cron security:
 openssl rand -hex 20
 ```
 
-Add to `.env.local`:
+Add to `.env`:
 ```
 CRON_SECRET="your-random-cron-secret"
 ```
@@ -153,7 +156,7 @@ npm run dev
 
 Open http://localhost:3000
 
-1. Click "Get Started" → Sign in with Google
+1. Click "Connect Gmail" → Sign in with Google
 2. Go to Settings → verify your WhatsApp number
 3. Go to Dashboard → click "Scan Gmail Now"
 4. Watch opportunities appear!
@@ -176,8 +179,10 @@ curl -X POST http://localhost:3000/api/reminders/process \
 | Problem | Fix |
 |---|---|
 | Gmail not connecting | Make sure you added yourself as a test user in Google Cloud Console |
+| "PingMate doesn't have permission to read Gmail" | Click **Grant Gmail access** and tick **View your email messages** on Google's consent screen (it is unticked by default) |
+| WhatsApp reminders stop arriving | The Twilio sandbox only delivers within 24 hours of your last message to it. Send any message (or your `join <word>` phrase) to the sandbox number, then use **Settings → Send test message**. Waiting reminders retry every 15 minutes |
 | WhatsApp OTP not received | Make sure you joined the Twilio sandbox (send "join [word]" to the number) |
-| Prisma errors | Run `npx prisma db push` again |
+| Prisma errors / `tenant/user not found` | Copy a new **Connect → ORM → Prisma → Session pooler** URL from Supabase and replace `DATABASE_URL` in `.env` |
 | Build errors | Run `npm install` then `npm run dev` again |
 
 ---

@@ -24,7 +24,7 @@ Next.js App (Vercel)
     ▼                            ▼
 PostgreSQL (Supabase)        External APIs
 ├── Users                    ├── Gmail API (read emails)
-├── Accounts (OAuth tokens)  ├── OpenAI (analyze emails)
+├── Accounts (OAuth tokens)  ├── Groq (analyze emails)  
 ├── Emails                   └── Twilio (send WhatsApp)
 ├── Opportunities
 ├── Reminders
@@ -44,7 +44,7 @@ PostgreSQL (Supabase)        External APIs
               │
               ▼
 3. analyzeEmail(subject, body, sender)
-   └── OpenAI GPT-4o-mini
+   └── Groq (openai/gpt-oss-120b)
    └── Returns: { isOpportunity, title, category, deadline, link, priority }
               │
               ▼ (if isOpportunity === true)
@@ -53,16 +53,18 @@ PostgreSQL (Supabase)        External APIs
               │
               ▼ (if deadline exists)
 5. scheduleRemindersForOpportunity(opportunityId, userId)
-   └── Calculate: dayBefore, sameDayMorning, fourHoursBefore
+   └── Uses the user's settings (reminder time in IST, hours before)
+   └── Calculate: day before, deadline day, N hours before
    └── prisma.reminder.createMany(...)
               │
-              ▼ (every 15 minutes, via Vercel Cron)
-6. /api/reminders/process
-   └── processDueReminders()
-       └── Find all PENDING reminders where scheduledAt <= now
-       └── For each: sendWhatsAppMessage(phone, message)
-           └── Twilio API → WhatsApp message delivered
-       └── Update reminder status: SENT or FAILED
+              ▼ (every minute locally via node-cron; via a cron call when hosted)
+6. processDueReminders()
+   └── Find all PENDING reminders where scheduledAt <= now
+   └── For each: sendWhatsAppMessage(phone, message)
+       └── Twilio API → WhatsApp message delivered
+   └── SENT on success; sandbox/session errors are retried every
+       15 minutes; other errors are marked FAILED
+   └── analyzePendingEmails() continues any unfinished AI analysis
 ```
 
 ## Key Design Decisions
@@ -72,15 +74,16 @@ PostgreSQL (Supabase)        External APIs
 - Serverless → zero server management
 - Works perfectly with Vercel deployment
 
-### Why GPT-4o-mini?
-- Cheapest OpenAI model ($0.15/1M tokens)
-- Fast enough for real-time analysis
-- Good at structured JSON extraction
+### Why Groq?
+- Free tier, OpenAI-compatible API (reuses the `openai` SDK)
+- Very fast inference (~1s per email)
+- JSON mode for structured extraction; emails without opportunity keywords are
+  filtered locally first so a scan stays inside the per-minute rate limits
 
-### Why Vercel Cron instead of node-cron?
-- Serverless functions can't run background jobs
-- Vercel Cron calls the API endpoint every 15 minutes
-- Free on Vercel hobby plan
+### Why both node-cron and a cron endpoint?
+- Locally, `src/instrumentation-node.ts` runs the scheduler every minute
+- Serverless hosts can't run background jobs, so `/api/reminders/process`
+  does the same work when called by Vercel Cron or an external cron service
 
 ### Why Twilio Sandbox for WhatsApp?
 - Free to set up and test
@@ -89,15 +92,18 @@ PostgreSQL (Supabase)        External APIs
 
 ## Security Considerations
 
-- Gmail tokens stored encrypted in DB (handled by NextAuth)
+- Gmail access is read-only (`gmail.readonly`); OAuth tokens are stored in the
+  `Account` table by Auth.js, so protect database access
 - Cron endpoint protected by `CRON_SECRET` bearer token
 - User data strictly scoped (every DB query filters by `userId`)
-- OTPs stored in memory with 10-minute expiry
-- Phone numbers stored only after verification
+- OTPs are stored only as SHA-256 hashes with a 10-minute expiry and never sent
+  to the browser
+- Reminders are only delivered to verified WhatsApp numbers
 
 ## Future Improvements
 
-- [ ] Redis for OTP storage (instead of in-memory Map)
+- [ ] Encrypt OAuth tokens at rest
+- [ ] Approved WhatsApp templates for production delivery
 - [ ] Email categorization improvements with few-shot prompting
 - [ ] Multiple Gmail accounts per user
 - [ ] Calendar integration

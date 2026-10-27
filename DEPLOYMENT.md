@@ -1,5 +1,13 @@
 # 🚀 PingMate Deployment Guide
 
+## Before you deploy
+
+1. In Supabase, open **Connect → ORM → Prisma**, copy the *current* connection string, and use it for `DATABASE_URL`. Do not reuse an old pooler password or host.
+2. Apply the current schema with `npx prisma db push`. If the pooler prevents it, run the safe migration at `prisma/migrations/20261008_persist_whatsapp_otp/migration.sql` in Supabase SQL Editor.
+3. Add `https://YOUR-VERCEL-DOMAIN/api/auth/callback/google` in Google Cloud OAuth Authorized redirect URIs.
+4. Set `NEXTAUTH_URL=https://YOUR-VERCEL-DOMAIN` plus a new production `NEXTAUTH_SECRET` in Vercel.
+5. For college portal notices, optionally set `RECRUITSAGE_SENDER_DOMAINS` to a comma-separated list of sender domains if your Recruitsage notifications do not visibly contain “Recruitsage”.
+
 ## Deploy to Vercel (Free Tier)
 
 ### Step 1 — Push to GitHub
@@ -29,7 +37,7 @@ NEXTAUTH_URL        ← set to your Vercel URL: https://pingmate-xyz.vercel.app
 NEXTAUTH_SECRET
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
-OPENAI_API_KEY
+GROQ_API_KEY
 TWILIO_ACCOUNT_SID
 TWILIO_AUTH_TOKEN
 TWILIO_WHATSAPP_NUMBER
@@ -48,22 +56,19 @@ NEXT_PUBLIC_TWILIO_SANDBOX_NUMBER
 
 In Vercel, click **Redeploy** → it should succeed now.
 
-### Step 6 — Verify Cron
+### Step 6 — Set Up the Reminder Cron
 
-The `vercel.json` file configures the reminder cron:
+`vercel.json` registers a **daily** Vercel Cron (`0 3 * * *`, 08:30 IST), which is
+the most frequent schedule the Vercel Hobby plan allows. Vercel sends the
+`Authorization: Bearer CRON_SECRET` header automatically.
 
-```json
-{
-  "crons": [
-    {
-      "path": "/api/reminders/process",
-      "schedule": "*/15 * * * *"
-    }
-  ]
-}
-```
+Daily is not enough for "1 day before" and "4 hours before" reminders. For timely
+delivery, either:
 
-Vercel will call this every 15 minutes with the `Authorization: Bearer CRON_SECRET` header automatically.
+- **Vercel Pro:** change the schedule in `vercel.json` to `*/15 * * * *`, or
+- **Free external cron** (e.g. cron-job.org): call
+  `GET https://YOUR-VERCEL-DOMAIN/api/reminders/process` every 5–15 minutes with the
+  header `Authorization: Bearer <CRON_SECRET>`.
 
 Check **Vercel Dashboard → Logs → Cron** to verify it's running.
 
@@ -94,7 +99,7 @@ No extra setup needed — Vercel connects directly via `DATABASE_URL`.
 |---|---|
 | Vercel | Free (hobby plan) |
 | Supabase | Free (500MB) |
-| OpenAI | ~$0.001 per email analyzed |
+| Groq | Free tier (rate-limited) |
 | Twilio | Free trial credits ($15) |
 
 For a student MVP, total monthly cost is near $0.
